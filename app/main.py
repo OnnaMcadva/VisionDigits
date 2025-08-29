@@ -5,7 +5,7 @@ import torch
 
 app = FastAPI(title="Sketch2Action API")
 
-model = ModelWrapper("model/dummy_model.pt")
+model = ModelWrapper("model/sketch_cnn.pt", num_classes=10)
 
 @app.get("/")
 def root():
@@ -21,12 +21,12 @@ async def predict(file: UploadFile = File(...)):
 # source venv/bin/activate
 # uvicorn app.main:app --reload
 
-# pip cache purge
+# pip cache purge ???
 # pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 # pip install fastapi uvicorn
 # pip install python-multipart
+# python app/train.py
 # uvicorn app.main:app --reload
-
 
 
 # http://127.0.0.1:8000
