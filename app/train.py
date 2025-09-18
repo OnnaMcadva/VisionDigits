@@ -2,48 +2,50 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
-
-class SimpleCNN(nn.Module):
-    def __init__(self, num_classes=10):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, 1)
-        self.pool1 = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(32, 64, 3, 1)
-        self.pool2 = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(64*5*5, 128)
-        self.fc2 = nn.Linear(128, num_classes)
-
-    def forward(self, x):
-        x = torch.relu(self.conv1(x))
-        x = self.pool1(x)
-        x = torch.relu(self.conv2(x))
-        x = self.pool2(x)
-        x = torch.flatten(x, 1)
-        x = torch.relu(self.fc1(x))
-        return self.fc2(x)
-
+from torch.utils.data import DataLoader, random_split
+from app.simple_cnn import SimpleCNN
+import os
+from tqdm import tqdm
 
 batch_size = 64
-epochs = 3
+epochs = 10  # увеличено количество эпох
 lr = 0.001
+dropout = 0.3
 
 transform = transforms.Compose([
     transforms.Resize((28,28)),
     transforms.ToTensor()
 ])
-train_dataset = datasets.MNIST(root="./data", train=True, transform=transform, download=True)
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+dataset = datasets.MNIST(root="./data", train=True, transform=transform, download=True)
+test_dataset = datasets.MNIST(root="./data", train=False, transform=transform, download=True)
+
+train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=1000, shuffle=False)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = SimpleCNN(num_classes=10).to(device)
+model = SimpleCNN(num_classes=10, dropout=dropout).to(device)
 optimizer = optim.Adam(model.parameters(), lr=lr)
 criterion = nn.CrossEntropyLoss()
+
+def evaluate(model, loader, device):
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for images, labels in loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    return correct / total
 
 model.train()
 for epoch in range(epochs):
     total_loss = 0
-    for images, labels in train_loader:
+    loop = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
+    for images, labels in loop:
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad()
         outputs = model(images)
@@ -51,7 +53,16 @@ for epoch in range(epochs):
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
-    print(f"Epoch {epoch+1}, Loss: {total_loss/len(train_loader):.4f}")
+        loop.set_postfix(loss=loss.item())
+    avg_loss = total_loss/len(train_loader)
+    acc = evaluate(model, test_loader, device)
+    print(f"Epoch {epoch+1}, Loss: {avg_loss:.4f}, Test Accuracy: {acc*100:.2f}%")
 
-torch.save(model.state_dict(), "model/sketch_cnn.pt")
-print("✅ Model saved to model/sketch_cnn.pt")
+save_path = "model/sketch_cnn.pt"
+if os.path.exists(save_path):
+    import datetime
+    dt = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_path = f"model/sketch_cnn_{dt}.pt"
+os.makedirs("model", exist_ok=True)
+torch.save(model.state_dict(), save_path)
+print(f"✅ Model saved to {save_path}")

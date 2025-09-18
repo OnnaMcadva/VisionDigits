@@ -4,3 +4,5 @@ torch
 torchvision
 pillow
 opencv-python
+tqdm
+python-multipart
